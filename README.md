@@ -1,2 +1,5 @@
-# MemoTicket
-票夹是一个文娱票根记录与同好组队平台。以数字化票根的形式，记录电影、书籍、剧本杀、密室、旅游等各类休闲活动足迹，玩家也可对体验内容进行评分评价及添加标签，发布推荐与避雷笔记，也可在平台上进行多人娱乐活动组队，为文娱爱好者提供一站式体验归档和同好交流的平台。
+# Vue 3 + Vite
+
+This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+
+Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
