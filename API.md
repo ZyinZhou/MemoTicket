@@ -72,3 +72,36 @@
 **返回失败示例：**
 
 <pre><code>{ "code": 400, "msg": "用户名或密码错误" }</code></pre>
+
+---
+
+## 4. 创建票根
+
+* **请求方式**：POST
+* **请求路径**：`/api/tickets`
+* **请求头**：`Authorization: Bearer <token>`（登录接口返回的 token）
+* **请求体 (JSON)**：
+
+<pre><code>{
+  "title": "五月天演唱会",
+  "memo": "第一次看演唱会"
+}</code></pre>
+
+*(注：`title` 必填，`memo` 可选)*
+
+**返回成功示例：**
+
+<pre><code>{
+  "code": 200,
+  "msg": "创建成功",
+  "data": {
+    "ticket_id": 1,
+    "create_time": "2026-11-03 10:00:00"
+  }
+}</code></pre>
+
+**返回失败示例：**
+
+<pre><code>{ "code": 400, "msg": "票根标题不能为空" }</code></pre>
+
+<pre><code>{ "code": 401, "msg": "未登录或登录已过期" }</code></pre>

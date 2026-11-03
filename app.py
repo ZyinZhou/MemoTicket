@@ -117,5 +117,9 @@ def login():
     finally:
         conn.close()
 
+# ================= 4. 票根管理接口（E） =================
+from ticket_api import ticket_bp
+app.register_blueprint(ticket_bp)
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
