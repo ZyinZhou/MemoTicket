@@ -3,11 +3,11 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
 const request = axios.create({
-  baseURL: 'http://127.0.0.1:5000', // ºó¶ËµØÖ·
+  baseURL: 'http://127.0.0.1:5000', // åç«¯åœ°å€
   timeout: 5000
 })
 
-// ÇëÇóÀ¹½ØÆ÷£º×Ô¶¯Ğ¯´ø Token
+// è¯·æ±‚æ‹¦æˆªå™¨ï¼šè‡ªåŠ¨æºå¸¦ Token
 request.interceptors.request.use(
   config => {
     const token = localStorage.getItem('token')
@@ -19,18 +19,18 @@ request.interceptors.request.use(
   error => Promise.reject(error)
 )
 
-// ÏìÓ¦À¹½ØÆ÷£ºÍ³Ò»´¦Àí´íÎó
+// å“åº”æ‹¦æˆªå™¨ï¼šç»Ÿä¸€å¤„ç†é”™è¯¯
 request.interceptors.response.use(
   response => {
     const res = response.data
     if (res.code !== 200) {
-      ElMessage.error(res.msg || 'ÇëÇóÊ§°Ü')
+      ElMessage.error(res.msg || 'è¯·æ±‚å¤±è´¥')
       return Promise.reject(new Error(res.msg || 'Error'))
     }
     return res
   },
   error => {
-    ElMessage.error(error.message || 'ÍøÂç´íÎó')
+    ElMessage.error(error.message || 'ç½‘ç»œé”™è¯¯')
     return Promise.reject(error)
   }
 )

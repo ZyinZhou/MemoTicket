@@ -7,7 +7,25 @@ const routes = [
   { 
     path: '/profile', 
     component: () => import('../views/Profile.vue'),
-    meta: { requiresAuth: true } // 需要登录才能访问
+    meta: { requiresAuth: true } 
+  },
+  // 票夹列表页
+  {
+    path: '/tickets',
+    component: () => import('../views/TicketList.vue'),
+    meta: { requiresAuth: true }
+  },
+  // 票根详情页
+  {
+    path: '/ticket/:id',
+    component: () => import('../views/TicketDetail.vue'),
+    meta: { requiresAuth: true }
+  },
+  // 票根编辑/新增页
+  {
+    path: '/ticket/edit/:id?',
+    component: () => import('../views/TicketEdit.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 
@@ -16,7 +34,6 @@ const router = createRouter({
   routes
 })
 
-// 全局路由守卫：未登录跳回登录页
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
   if (to.meta.requiresAuth && !token) {

@@ -2,40 +2,93 @@
     <div class="profile-container">
         <!-- 左侧侧边栏 -->
         <div class="sidebar">
-            <el-avatar :size="80" src="https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png" />
-            <h3>用户昵称</h3>
-            <p style="color: gray; font-size: 12px;">ID: {{ userId }}</p>
-            <el-menu default-active="1" class="menu">
-                <el-menu-item index="1">我的主页</el-menu-item>
-                <el-menu-item index="2">我的票根</el-menu-item>
-                <el-menu-item index="3">账号设置</el-menu-item>
+            <el-avatar :size="80" :src="userInfo.avatar || 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'" />
+            <h3>{{ userInfo.nickname || '用户昵称' }}</h3>
+            <p style="color: gray; font-size: 12px;">ID: {{ userInfo.id || '未获取' }}</p>
+
+            <!-- 开启 router 模式，点击跳转 -->
+            <el-menu :default-active="$route.path" class="menu" router>
+                <el-menu-item index="/profile">账号设置</el-menu-item>
+                <el-menu-item index="/tickets">我的票夹</el-menu-item>
             </el-menu>
+
             <el-button type="danger" plain style="margin-top: 20px; width: 80%;" @click="handleLogout">退出登录</el-button>
         </div>
 
-        <!-- 右侧主体内容 -->
+        <!-- 右侧主体内容 (账号设置) -->
         <div class="main-content">
-            <el-card>
-                <h2>欢迎回来！</h2>
-                <p>这里将会展示你的票根记录和同好推荐。</p>
+            <el-card v-if="$route.path === '/profile'">
+                <h2>账号设置</h2>
+                <el-form :model="userInfo" label-width="100px" style="max-width: 500px; margin-top: 20px;">
+                    <el-form-item label="用户昵称">
+                        <el-input v-model="userInfo.nickname" placeholder="请输入昵称"></el-input>
+                    </el-form-item>
+                    <el-form-item label="个人简介">
+                        <el-input v-model="userInfo.bio" type="textarea" :rows="4" placeholder="介绍一下自己吧~"></el-input>
+                    </el-form-item>
+                    <el-form-item>
+                        <el-button type="primary" @click="handleUpdate" :loading="loading">保存修改</el-button>
+                    </el-form-item>
+                </el-form>
             </el-card>
+
+            <!-- 如果路由是 /tickets，这里会显示子路由，但为了简单，我们在菜单中做了路由跳转，所以这里不用写 router-view -->
         </div>
     </div>
 </template>
 
 <script setup>
-    import { ref } from 'vue'
+    import { ref, reactive, onMounted } from 'vue'
     import { useRouter } from 'vue-router'
+    import { getUserInfoApi, updateUserInfoApi } from '../api/user'
+    import { ElMessage } from 'element-plus'
 
     const router = useRouter()
-    const userId = ref(localStorage.getItem('user_id'))
+    const loading = ref(false)
+    const userInfo = reactive({
+    id: '',
+    nickname: '',
+    bio: '',
+    avatar: ''
+    })
 
-    // 退出登录：清除 token 并回到登录页
+    // 获取个人信息
+    const fetchUserInfo = async () => {
+    try {
+    const res = await getUserInfoApi()
+    Object.assign(userInfo, res.data) // 将后端数据合并到响应式对象中
+    } catch (error) {
+    console.error('获取信息失败', error)
+    }
+    }
+
+    // 更新个人信息
+    const handleUpdate = async () => {
+    loading.value = true
+    try {
+    await updateUserInfoApi({
+    nickname: userInfo.nickname,
+    bio: userInfo.bio
+    })
+    ElMessage.success('信息更新成功')
+    } catch (error) {
+    console.error(error)
+    } finally {
+    loading.value = false
+    }
+    }
+
+    // 退出登录
     const handleLogout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user_id')
+    ElMessage.success('已退出登录')
     router.push('/login')
     }
+
+    onMounted(() => {
+    fetchUserInfo()
+    })
 </script>
 
 <style scoped>
@@ -44,6 +97,7 @@
         height: 100vh;
         padding: 20px;
         box-sizing: border-box;
+        background-color: #f5f7fa;
     }
 
     .sidebar {
@@ -51,8 +105,11 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        border-right: 1px solid #e0e0e0;
-        padding-right: 20px;
+        background: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 12px 0 rgba(0,0,0,.1);
+        margin-right: 20px;
     }
 
     .menu {
@@ -63,6 +120,5 @@
 
     .main-content {
         flex: 1;
-        padding-left: 20px;
     }
 </style>
