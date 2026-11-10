@@ -1,3 +1,4 @@
+import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS  # 新增：解决跨域
 import pyodbc
@@ -15,29 +16,44 @@ serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 # ================= 数据库连接配置 =================
 DB_CONFIG = (
     'DRIVER={ODBC Driver 17 for SQL Server};'
-    'SERVER=localhost\\SQLEXPRESS;'
+    'SERVER=localhost;'
     'DATABASE=InterestDB;'
     'UID=sa;'
-    'PWD=JohnTitor488;'  # <--- 改成你的密码
+    f'PWD={os.environ["MEMOTICKET_DB_PASSWORD"]};'
+    'TrustServerCertificate=yes;'
 )
-
 def get_db_connection():
     return pyodbc.connect(DB_CONFIG)
 
 # ================= 1. 预设兴趣查询接口 =================
+
 @app.route('/api/interests', methods=['GET'])
 def get_interests():
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT InterestId, Name FROM Interests")
         rows = cursor.fetchall()
-        # 返回中文，防止 unicode 转义 (ensure_ascii=False)
-        return jsonify({"code": 200, "data": [{"id": r.InterestId, "name": r.Name} for r in rows]}), 200
+
+        return jsonify({
+            "code": 200,
+            "data": [
+                {"id": r.InterestId, "name": r.Name}
+                for r in rows
+            ]
+        }), 200
+
     except Exception as e:
-        return jsonify({"code": 500, "msg": str(e)}), 500
+        app.logger.exception("获取兴趣列表失败")
+        return jsonify({
+            "code": 500,
+            "msg": str(e)
+        }), 500
+
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 # ================= 2. 用户注册接口 =================
 @app.route('/api/register', methods=['POST'])

@@ -1,3 +1,4 @@
+import os
 # -*- coding: utf-8 -*-
 # 票根管理接口（E：后端开发2 票根管理）
 # 采用 Blueprint 独立成模块，避免与其他成员在 app.py 中的接口相互冲突
@@ -25,10 +26,11 @@ ticket_bp = Blueprint('ticket', __name__)
 # 说明：暂复制一份，避免模块间循环导入
 DB_CONFIG = (
     'DRIVER={ODBC Driver 17 for SQL Server};'
-    'SERVER=localhost\\SQLEXPRESS;'
+    'SERVER=localhost;'
     'DATABASE=InterestDB;'
     'UID=sa;'
-    'PWD=JohnTitor488;'
+    f'PWD={os.environ["MEMOTICKET_DB_PASSWORD"]};'
+    'TrustServerCertificate=yes;'
 )
 
 def get_db_connection():
