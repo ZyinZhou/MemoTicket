@@ -56,7 +56,7 @@
     localStorage.setItem('user_id', res.user_id)
 
     ElMessage.success('登录成功')
-    router.push('/profile') // 登录成功跳转个人中心
+    router.push('/') // 登录成功返回首页
     } catch (error) {
     console.error('登录失败', error)
     }
