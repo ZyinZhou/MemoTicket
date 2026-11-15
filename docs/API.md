@@ -83,14 +83,16 @@
 * **请求体 (JSON)**：
 
 <pre><code>{
-  "title": "五月天演唱会",
-  "event_date": "2026-10-01",
-  "venue": "国家体育场",
-  "memo": "第一次看演唱会",
+  "title": "电影《奥本海默》",
+  "type": "电影",
+  "rating": 5,
+  "content": "音效震撼，值得二刷",
+  "event_date": "2026-09-15",
+  "venue": "万达影城",
   "interests": [1, 2]
 }</code></pre>
 
-*(注：`title` 必填；`event_date` 格式为 `YYYY-MM-DD`；`venue`、`memo` 可选；`interests` 为兴趣ID数组，可选)*
+*(注：`title` 必填，不超过 100 字；`type` 可选，取值限 电影/书籍/剧本杀/密室/旅游；`rating` 可选，1-5 整数；`content` 可选，体验笔记，不超过 500 字，兼容入参 `memo`；`event_date` 可选，格式 `YYYY-MM-DD`；`venue` 可选，不超过 100 字；`interests` 可选，兴趣ID数组)*
 
 **返回成功示例：**
 
@@ -98,14 +100,18 @@
   "code": 200,
   "msg": "创建成功",
   "data": {
-    "ticket_id": 1,
-    "create_time": "2026-11-03 10:00:00"
+    "id": 1,
+    "createTime": "2026-11-15 10:00:00"
   }
 }</code></pre>
 
 **返回失败示例：**
 
 <pre><code>{ "code": 400, "msg": "票根标题不能为空" }</code></pre>
+
+<pre><code>{ "code": 400, "msg": "票根类型只能为：电影、书籍、剧本杀、密室、旅游" }</code></pre>
+
+<pre><code>{ "code": 400, "msg": "评分必须为1-5的整数" }</code></pre>
 
 <pre><code>{ "code": 401, "msg": "未登录或登录已过期" }</code></pre>
 
@@ -117,7 +123,7 @@
 * **请求路径**：`/api/tickets`
 * **请求头**：`Authorization: Bearer <token>`
 * **请求参数**：无
-* **说明**：返回当前用户创建的全部票根，按创建时间倒序
+* **说明**：返回当前用户创建的全部票根，按创建时间倒序；字段名与前端列表页一致
 
 **返回成功示例：**
 
@@ -126,13 +132,15 @@
   "msg": "查询成功",
   "data": [
     {
-      "ticket_id": 1,
-      "user_id": 1,
-      "title": "五月天演唱会",
-      "event_date": "2026-10-01",
-      "venue": "国家体育场",
-      "memo": "第一次看演唱会",
-      "create_time": "2026-11-03 10:00:00",
+      "id": 1,
+      "userId": 1,
+      "title": "电影《奥本海默》",
+      "type": "电影",
+      "rating": 5,
+      "content": "音效震撼，值得二刷",
+      "eventDate": "2026-09-15",
+      "venue": "万达影城",
+      "createTime": "2026-11-15 10:00:00",
       "interests": [1, 2]
     }
   ]
@@ -147,7 +155,7 @@
 ## 6. 查询票根详情
 
 * **请求方式**：GET
-* **请求路径**：`/api/tickets/{ticket_id}`
+* **请求路径**：`/api/tickets/{id}`
 * **请求头**：`Authorization: Bearer <token>`
 * **说明**：仅票根创建者可查看
 
@@ -157,13 +165,15 @@
   "code": 200,
   "msg": "查询成功",
   "data": {
-    "ticket_id": 1,
-    "user_id": 1,
-    "title": "五月天演唱会",
-    "event_date": "2026-10-01",
-    "venue": "国家体育场",
-    "memo": "第一次看演唱会",
-    "create_time": "2026-11-03 10:00:00",
+    "id": 1,
+    "userId": 1,
+    "title": "电影《奥本海默》",
+    "type": "电影",
+    "rating": 5,
+    "content": "音效震撼，值得二刷",
+    "eventDate": "2026-09-15",
+    "venue": "万达影城",
+    "createTime": "2026-11-15 10:00:00",
     "interests": [1, 2]
   }
 }</code></pre>
@@ -181,19 +191,19 @@
 ## 7. 修改票根
 
 * **请求方式**：PUT
-* **请求路径**：`/api/tickets/{ticket_id}`
+* **请求路径**：`/api/tickets/{id}`
 * **请求头**：`Authorization: Bearer <token>`
 * **请求体 (JSON)**：
 
 <pre><code>{
-  "title": "五月天演唱会（改）",
-  "event_date": "2026-10-01",
-  "venue": "国家体育场",
-  "memo": "第一次看演唱会",
+  "title": "电影《奥本海默》",
+  "type": "电影",
+  "rating": 4,
+  "content": "重看一遍，依然推荐",
   "interests": [2]
 }</code></pre>
 
-*(注：`title` 必填；`interests` 传入时整体替换原有兴趣关联，不传则保持不变；仅票根创建者可修改)*
+*(注：未提交的字段沿用原票根的值；`interests` 传入时整体替换原有兴趣关联，不传则保持不变；仅票根创建者可修改)*
 
 **返回成功示例：**
 
@@ -212,7 +222,7 @@
 ## 8. 删除票根
 
 * **请求方式**：DELETE
-* **请求路径**：`/api/tickets/{ticket_id}`
+* **请求路径**：`/api/tickets/{id}`
 * **请求头**：`Authorization: Bearer <token>`
 * **说明**：仅票根创建者可删除，删除时同步清理其兴趣关联记录
 

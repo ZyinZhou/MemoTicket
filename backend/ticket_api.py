@@ -1,4 +1,3 @@
-import os
 # -*- coding: utf-8 -*-
 # 票根管理接口（E：后端开发2 票根管理）
 # 采用 Blueprint 独立成模块，避免与其他成员在 app.py 中的接口相互冲突
@@ -8,10 +7,13 @@ import os
 # 对接说明：
 #   - 鉴权：请求头携带 Authorization: Bearer <token>，token 来自登录接口
 #   - 返回格式：{ "code": 200, "msg": "...", "data": {...} }，与现有接口一致
-#   - 前端 baseURL 已指向 http://127.0.0.1:5000，请求拦截器会自动附带 token
+#   - 字段口径：返回字段名与前端页面一致（id、title、type、rating、content、eventDate、venue、createTime、interests）
+#   - 入参兼容：正文可用 content 或 memo，日期可用 event_date 或 eventDate
 #   - 权限：票根仅创建者可查看、修改、删除，其他用户访问返回 403
 #   - 表依赖：Users(UserId)、Interests(InterestId)、Tickets、TicketInterests
 #   - 关联表 TicketInterests 的写入与清理在本模块内完成，表结构变更需同步修改本模块
+
+import os
 
 from flask import Blueprint, request, jsonify, current_app
 from itsdangerous import URLSafeTimedSerializer
@@ -21,6 +23,9 @@ import pyodbc
 from ticket_model import Ticket
 
 ticket_bp = Blueprint('ticket', __name__)
+
+# 票根类型允许取值，与前端编辑页下拉选项一致
+TICKET_TYPES = ("电影", "书籍", "剧本杀", "密室", "旅游")
 
 # 数据库连接配置，与 app.py 保持一致
 # 说明：暂复制一份，避免模块间循环导入
@@ -55,33 +60,80 @@ def get_json_body():
     body = request.get_json(silent=True)
     return body if isinstance(body, dict) else {}
 
-def parse_ticket_fields(data):
-    # 校验票根字段并返回规范化字段字典，校验失败返回 (错误提示, None)
-    # 规则：Title 必填且不超过100字符；EventDate 格式 YYYY-MM-DD；
-    #       Venue 不超过100字符；Memo 不超过500字符
-    title = str(data.get('title') or '').strip()
+def parse_ticket_fields(data, existing=None):
+    # 校验票根字段，返回 (错误提示, 规范化字段字典)
+    # existing 不为空时，请求未提交的字段沿用原票根的值，用于修改接口
+    # 规则：title 必填且不超过100字符；type 仅限 TICKET_TYPES；
+    #       rating 为1-5整数；content 不超过500字符；
+    #       event_date 格式 YYYY-MM-DD；venue 不超过100字符
+    if 'title' in data:
+        title = str(data.get('title') or '').strip()
+    else:
+        title = existing.title if existing else ''
     if not title:
         return "票根标题不能为空", None
     if len(title) > 100:
         return "票根标题不能超过100个字符", None
 
-    venue = str(data.get('venue') or '').strip()
-    if len(venue) > 100:
+    if 'type' in data:
+        ticket_type = str(data.get('type') or '').strip() or None
+        if ticket_type and ticket_type not in TICKET_TYPES:
+            return "票根类型只能为：电影、书籍、剧本杀、密室、旅游", None
+    else:
+        ticket_type = existing.ticket_type if existing else None
+
+    if 'rating' in data:
+        raw_rating = data.get('rating')
+        rating = None
+        if raw_rating not in (None, ''):
+            if isinstance(raw_rating, bool) or (isinstance(raw_rating, float) and not raw_rating.is_integer()):
+                return "评分必须为1-5的整数", None
+            try:
+                rating = int(raw_rating)
+            except (TypeError, ValueError):
+                return "评分必须为1-5的整数", None
+            if rating < 1 or rating > 5:
+                return "评分必须为1-5的整数", None
+    else:
+        rating = existing.rating if existing else None
+
+    if 'content' in data:
+        content = str(data.get('content') or '').strip()
+    elif 'memo' in data:
+        content = str(data.get('memo') or '').strip()
+    else:
+        content = existing.content if existing else ''
+    if content and len(content) > 500:
+        return "体验笔记不能超过500个字符", None
+    content = content or None
+
+    if 'event_date' in data or 'eventDate' in data:
+        raw_value = data.get('event_date') if 'event_date' in data else data.get('eventDate')
+        raw_date = str(raw_value or '').strip()
+        event_date = None
+        if raw_date:
+            try:
+                event_date = datetime.strptime(raw_date, '%Y-%m-%d').date()
+            except ValueError:
+                return "日期格式应为 YYYY-MM-DD", None
+    else:
+        event_date = existing.event_date if existing else None
+
+    if 'venue' in data:
+        venue = str(data.get('venue') or '').strip() or None
+    else:
+        venue = existing.venue if existing else None
+    if venue and len(venue) > 100:
         return "活动地点不能超过100个字符", None
 
-    memo = str(data.get('memo') or '').strip()
-    if len(memo) > 500:
-        return "描述不能超过500个字符", None
-
-    event_date = None
-    raw_date = str(data.get('event_date') or '').strip()
-    if raw_date:
-        try:
-            event_date = datetime.strptime(raw_date, '%Y-%m-%d').date()
-        except ValueError:
-            return "日期格式应为 YYYY-MM-DD", None
-
-    return "", {"title": title, "event_date": event_date, "venue": venue, "memo": memo}
+    return "", {
+        "title": title,
+        "type": ticket_type,
+        "rating": rating,
+        "content": content,
+        "event_date": event_date,
+        "venue": venue
+    }
 
 def parse_interest_ids(data):
     # 校验 interests 字段，返回去重后的兴趣ID列表
@@ -129,7 +181,7 @@ def load_owned_ticket(cursor, ticket_id, user_id):
     # 查询票根并校验归属，返回 (票根对象, 错误响应)
     # 票根不存在返回 404，非本人所有返回 403
     cursor.execute(
-        """SELECT TicketId, UserId, Title, EventDate, Venue, Memo, CreateTime
+        """SELECT TicketId, UserId, Title, Type, Rating, Memo, EventDate, Venue, CreateTime
            FROM Tickets WHERE TicketId = ?""",
         (ticket_id,)
     )
@@ -144,11 +196,13 @@ def load_owned_ticket(cursor, ticket_id, user_id):
 # 请求方式：POST /api/tickets
 # 请求体：
 #   {
-#     "title": "五月天演唱会",        // 必填，活动名称
-#     "event_date": "2026-10-01",    // 可选，活动日期
-#     "venue": "国家体育场",          // 可选，活动地点
-#     "memo": "第一次看演唱会",       // 可选，描述
-#     "interests": [1, 2]            // 可选，关联兴趣ID数组
+#     "title": "电影《奥本海默》",     // 必填，票根名称
+#     "type": "电影",                 // 可选，限：电影/书籍/剧本杀/密室/旅游
+#     "rating": 5,                    // 可选，1-5 整数
+#     "content": "音效震撼，值得二刷",  // 可选，体验笔记，不超过500字
+#     "event_date": "2026-09-15",     // 可选，活动日期 YYYY-MM-DD
+#     "venue": "万达影城",             // 可选，活动地点
+#     "interests": [1, 2]             // 可选，关联兴趣ID数组
 #   }
 # 返回：创建成功的票根ID与创建时间
 @ticket_bp.route('/api/tickets', methods=['POST'])
@@ -176,11 +230,11 @@ def create_ticket():
             return jsonify({"code": 400, "msg": msg}), 400
 
         cursor.execute(
-            """INSERT INTO Tickets (UserId, Title, EventDate, Venue, Memo)
+            """INSERT INTO Tickets (UserId, Title, Type, Rating, Memo, EventDate, Venue)
                OUTPUT INSERTED.TicketId, INSERTED.CreateTime
-               VALUES (?, ?, ?, ?, ?)""",
-            (user_id, fields['title'], fields['event_date'],
-             fields['venue'], fields['memo'])
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, fields['title'], fields['type'], fields['rating'],
+             fields['content'], fields['event_date'], fields['venue'])
         )
         row = cursor.fetchone()
 
@@ -194,7 +248,7 @@ def create_ticket():
         return jsonify({
             "code": 200,
             "msg": "创建成功",
-            "data": {"ticket_id": row.TicketId, "create_time": str(row.CreateTime)}
+            "data": {"id": row.TicketId, "createTime": str(row.CreateTime)}
         }), 200
     except Exception as e:
         if conn:
@@ -219,7 +273,7 @@ def list_tickets():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            """SELECT TicketId, UserId, Title, EventDate, Venue, Memo, CreateTime
+            """SELECT TicketId, UserId, Title, Type, Rating, Memo, EventDate, Venue, CreateTime
                FROM Tickets WHERE UserId = ?
                ORDER BY CreateTime DESC, TicketId DESC""",
             (user_id,)
@@ -269,7 +323,7 @@ def get_ticket_detail(ticket_id):
 
 # ================= 7. 修改票根接口 =================
 # 请求方式：PUT /api/tickets/<ticket_id>
-# 请求体与创建接口一致，title 必填
+# 请求体与创建接口一致；未提交的字段沿用原票根的值
 # interests 传入时整体替换原有兴趣关联，不传则保持不变
 @ticket_bp.route('/api/tickets/<int:ticket_id>', methods=['PUT'])
 def update_ticket(ticket_id):
@@ -278,9 +332,6 @@ def update_ticket(ticket_id):
         return jsonify({"code": 401, "msg": "未登录或登录已过期"}), 401
 
     data = get_json_body()
-    error, fields = parse_ticket_fields(data)
-    if error:
-        return jsonify({"code": 400, "msg": error}), 400
 
     conn = None
     try:
@@ -289,6 +340,11 @@ def update_ticket(ticket_id):
         ticket, error_response = load_owned_ticket(cursor, ticket_id, user_id)
         if error_response:
             return error_response
+
+        # 先取出原票根，未提交字段按原值回填，避免误清空
+        error, fields = parse_ticket_fields(data, ticket)
+        if error:
+            return jsonify({"code": 400, "msg": error}), 400
 
         # 仅在请求包含 interests 字段时校验并替换关联
         if 'interests' in data:
@@ -301,10 +357,11 @@ def update_ticket(ticket_id):
                 return jsonify({"code": 400, "msg": msg}), 400
 
         cursor.execute(
-            """UPDATE Tickets SET Title = ?, EventDate = ?, Venue = ?, Memo = ?
+            """UPDATE Tickets SET Title = ?, Type = ?, Rating = ?, Memo = ?,
+                                  EventDate = ?, Venue = ?
                WHERE TicketId = ?""",
-            (fields['title'], fields['event_date'], fields['venue'],
-             fields['memo'], ticket_id)
+            (fields['title'], fields['type'], fields['rating'], fields['content'],
+             fields['event_date'], fields['venue'], ticket_id)
         )
 
         if 'interests' in data:
