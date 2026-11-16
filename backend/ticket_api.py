@@ -55,10 +55,10 @@ def get_json_body():
     body = request.get_json(silent=True)
     return body if isinstance(body, dict) else {}
 
+
 def parse_ticket_fields(data):
-    # 校验票根字段并返回规范化字段字典，校验失败返回 (错误提示, None)
-    # 规则：Title 必填且不超过100字符；EventDate 格式 YYYY-MM-DD；
-    #       Venue 不超过100字符；Memo 不超过500字符
+    # 校验票根字段并返回规范化字段字典
+
     title = str(data.get('title') or '').strip()
     if not title:
         return "票根标题不能为空", None
@@ -73,15 +73,47 @@ def parse_ticket_fields(data):
     if len(memo) > 500:
         return "描述不能超过500个字符", None
 
+    # 体验类型：最多30个字符
+    ticket_type = data.get('type')
+    if ticket_type is not None:
+        if not isinstance(ticket_type, str):
+            return "体验类型格式不正确", None
+        ticket_type = ticket_type.strip()
+        if not ticket_type:
+            ticket_type = None
+        elif len(ticket_type) > 30:
+            return "体验类型不能超过30个字符", None
+
+    # 个人评分：只能是1～5的整数
+    rating = data.get('rating')
+    if rating == '':
+        rating = None
+
+    if rating is not None:
+        if isinstance(rating, bool) or not isinstance(rating, int):
+            return "评分必须为1到5之间的整数", None
+        if rating < 1 or rating > 5:
+            return "评分必须在1到5之间", None
+
+    # 活动日期
     event_date = None
     raw_date = str(data.get('event_date') or '').strip()
     if raw_date:
         try:
-            event_date = datetime.strptime(raw_date, '%Y-%m-%d').date()
+            event_date = datetime.strptime(
+                raw_date, '%Y-%m-%d'
+            ).date()
         except ValueError:
             return "日期格式应为 YYYY-MM-DD", None
 
-    return "", {"title": title, "event_date": event_date, "venue": venue, "memo": memo}
+    return "", {
+        "title": title,
+        "type": ticket_type,
+        "rating": rating,
+        "event_date": event_date,
+        "venue": venue,
+        "memo": memo
+    }
 
 def parse_interest_ids(data):
     # 校验 interests 字段，返回去重后的兴趣ID列表
@@ -129,8 +161,9 @@ def load_owned_ticket(cursor, ticket_id, user_id):
     # 查询票根并校验归属，返回 (票根对象, 错误响应)
     # 票根不存在返回 404，非本人所有返回 403
     cursor.execute(
-        """SELECT TicketId, UserId, Title, EventDate, Venue, Memo, CreateTime
-           FROM Tickets WHERE TicketId = ?""",
+       """SELECT TicketId, UserId, Title, Type, Rating,
+   EventDate, Venue, Memo, CreateTime
+   FROM Tickets WHERE TicketId = ?""",
         (ticket_id,)
     )
     row = cursor.fetchone()
@@ -176,11 +209,19 @@ def create_ticket():
             return jsonify({"code": 400, "msg": msg}), 400
 
         cursor.execute(
-            """INSERT INTO Tickets (UserId, Title, EventDate, Venue, Memo)
+            """INSERT INTO Tickets
+               (UserId, Title, Type, Rating, EventDate, Venue, Memo)
                OUTPUT INSERTED.TicketId, INSERTED.CreateTime
-               VALUES (?, ?, ?, ?, ?)""",
-            (user_id, fields['title'], fields['event_date'],
-             fields['venue'], fields['memo'])
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                user_id,
+                fields['title'],
+                fields['type'],
+                fields['rating'],
+                fields['event_date'],
+                fields['venue'],
+                fields['memo']
+            )
         )
         row = cursor.fetchone()
 
@@ -219,9 +260,10 @@ def list_tickets():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            """SELECT TicketId, UserId, Title, EventDate, Venue, Memo, CreateTime
-               FROM Tickets WHERE UserId = ?
-               ORDER BY CreateTime DESC, TicketId DESC""",
+          """SELECT TicketId, UserId, Title, Type, Rating,
+          EventDate, Venue, Memo, CreateTime
+   FROM Tickets WHERE UserId = ?
+   ORDER BY CreateTime DESC, TicketId DESC""",
             (user_id,)
         )
         tickets = [Ticket.from_row(row) for row in cursor.fetchall()]
@@ -299,13 +341,24 @@ def update_ticket(ticket_id):
             if missing:
                 msg = "存在无效的兴趣ID：" + ",".join(str(i) for i in missing)
                 return jsonify({"code": 400, "msg": msg}), 400
-
         cursor.execute(
-            """UPDATE Tickets SET Title = ?, EventDate = ?, Venue = ?, Memo = ?
-               WHERE TicketId = ?""",
-            (fields['title'], fields['event_date'], fields['venue'],
-             fields['memo'], ticket_id)
+            """UPDATE Tickets
+               SET Title = ?, Type = ?, Rating = ?,
+                   EventDate = ?, Venue = ?, Memo = ?
+               WHERE TicketId = ? AND UserId = ?""",
+            (
+                fields['title'],
+                fields['type'],
+                fields['rating'],
+                fields['event_date'],
+                fields['venue'],
+                fields['memo'],
+                ticket_id,
+                user_id
+            )
         )
+
+
 
         if 'interests' in data:
             cursor.execute("DELETE FROM TicketInterests WHERE TicketId = ?", (ticket_id,))

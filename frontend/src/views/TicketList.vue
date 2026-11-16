@@ -20,16 +20,16 @@
                 </el-table-column>
                 <el-table-column prop="rating" label="评分" width="150">
                     <template #default="scope">
-                        <el-rate v-model="scope.row.rating" disabled />
+                        <el-rate :model-value="scope.row.rating ?? 0" disabled />
                     </template>
                 </el-table-column>
-                <el-table-column prop="createTime" label="记录时间" width="180" />
+                <el-table-column prop="create_time" label="记录时间" width="180" />
                 <el-table-column label="操作" width="220" fixed="right">
                     <template #default="scope">
-                        <el-button size="small" type="info" @click="$router.push(`/ticket/${scope.row.id}`)">详情</el-button>
-                        <el-button size="small" type="primary" @click="$router.push(`/ticket/edit/${scope.row.id}`)">编辑</el-button>
+                        <el-button size="small" type="info" @click="$router.push(`/ticket/${scope.row.ticket_id}`)">详情</el-button>
+                        <el-button size="small" type="primary" @click="$router.push(`/ticket/edit/${scope.row.ticket_id}`)">编辑</el-button>
 
-                        <el-popconfirm title="确定要删除这张票根吗？" @confirm="handleDelete(scope.row.id)">
+                        <el-popconfirm title="确定要删除这张票根吗？" @confirm="handleDelete(scope.row.ticket_id)">
                             <template #reference>
                                 <el-button size="small" type="danger">删除</el-button>
                             </template>
