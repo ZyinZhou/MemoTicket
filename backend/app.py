@@ -33,13 +33,22 @@ def get_interests():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT InterestId, Name FROM Interests")
+        cursor.execute(
+            """SELECT InterestId, Name, IsCustom, CreatedBy, CreatedAt
+               FROM Interests ORDER BY IsCustom, Name"""
+        )
         rows = cursor.fetchall()
 
         return jsonify({
             "code": 200,
             "data": [
-                {"id": r.InterestId, "name": r.Name}
+                {
+                    "id": r.InterestId,
+                    "name": r.Name,
+                    "is_custom": bool(r.IsCustom),
+                    "created_by": r.CreatedBy,
+                    "created_at": r.CreatedAt.isoformat() if r.CreatedAt else None
+                }
                 for r in rows
             ]
         }), 200

@@ -55,6 +55,127 @@ def get_json_body():
     body = request.get_json(silent=True)
     return body if isinstance(body, dict) else {}
 
+def parse_interest_name(data):
+    name = str(data.get('name') or '').strip()
+    if not name:
+        return "兴趣名称不能为空", None
+    if len(name) > 100:
+        return "兴趣名称不能超过100个字符", None
+    return "", name
+
+def interest_error(status, message):
+    return jsonify({"code": status, "msg": message}), status
+
+@ticket_bp.route('/api/interests', methods=['POST'])
+def create_interest():
+    user_id = get_current_user_id()
+    if user_id is None:
+        return interest_error(401, "未登录或登录已过期")
+    error, name = parse_interest_name(get_json_body())
+    if error:
+        return interest_error(400, error)
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT InterestId FROM Interests WHERE Name = ?", (name,))
+        if cursor.fetchone():
+            return interest_error(409, "兴趣名称已存在")
+        cursor.execute(
+            """INSERT INTO Interests (Name, IsCustom, CreatedBy, CreatedAt)
+               OUTPUT INSERTED.InterestId, INSERTED.CreatedAt
+               VALUES (?, 1, ?, SYSDATETIME())""",
+            (name, user_id)
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        return jsonify({"code": 200, "msg": "创建成功", "data": {
+            "id": row.InterestId, "name": name, "is_custom": True,
+            "created_by": user_id,
+            "created_at": row.CreatedAt.isoformat() if row.CreatedAt else None
+        }}), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return interest_error(500, str(e))
+    finally:
+        if conn:
+            conn.close()
+
+@ticket_bp.route('/api/interests/<int:interest_id>', methods=['PUT'])
+def update_interest(interest_id):
+    user_id = get_current_user_id()
+    if user_id is None:
+        return interest_error(401, "未登录或登录已过期")
+    error, name = parse_interest_name(get_json_body())
+    if error:
+        return interest_error(400, error)
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT IsCustom, CreatedBy FROM Interests WHERE InterestId = ?",
+            (interest_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return interest_error(404, "兴趣不存在")
+        if not row.IsCustom:
+            return interest_error(403, "预设兴趣不可修改")
+        if row.CreatedBy != user_id:
+            return interest_error(403, "只有创建者可以修改该兴趣")
+        cursor.execute(
+            "SELECT InterestId FROM Interests WHERE Name = ? AND InterestId <> ?",
+            (name, interest_id)
+        )
+        if cursor.fetchone():
+            return interest_error(409, "兴趣名称已存在")
+        cursor.execute("UPDATE Interests SET Name = ? WHERE InterestId = ?", (name, interest_id))
+        conn.commit()
+        return jsonify({"code": 200, "msg": "修改成功"}), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return interest_error(500, str(e))
+    finally:
+        if conn:
+            conn.close()
+
+@ticket_bp.route('/api/interests/<int:interest_id>', methods=['DELETE'])
+def delete_interest(interest_id):
+    user_id = get_current_user_id()
+    if user_id is None:
+        return interest_error(401, "未登录或登录已过期")
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT IsCustom, CreatedBy FROM Interests WHERE InterestId = ?",
+            (interest_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return interest_error(404, "兴趣不存在")
+        if not row.IsCustom:
+            return interest_error(403, "预设兴趣不可删除")
+        if row.CreatedBy != user_id:
+            return interest_error(403, "只有创建者可以删除该兴趣")
+        cursor.execute("SELECT TOP 1 1 FROM TicketInterests WHERE InterestId = ?", (interest_id,))
+        if cursor.fetchone():
+            return interest_error(409, "该兴趣已被票根引用，不能删除")
+        cursor.execute("DELETE FROM Interests WHERE InterestId = ?", (interest_id,))
+        conn.commit()
+        return jsonify({"code": 200, "msg": "删除成功"}), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return interest_error(500, str(e))
+    finally:
+        if conn:
+            conn.close()
+
 
 def parse_ticket_fields(data):
     # 校验票根字段并返回规范化字段字典
