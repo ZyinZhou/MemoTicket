@@ -9,7 +9,7 @@
         </div>
       </template>
 
-      <div v-if="ticketInfo.ticket_id" class="detail-content">
+      <div v-if="ticketInfo.id || ticketInfo.ticket_id" class="detail-content">
         <h1>{{ ticketInfo.title }}</h1>
 
         <div class="meta-info">
@@ -19,7 +19,7 @@
           <el-tag v-else type="info">未填写类型</el-tag>
 
           <span class="create-time">
-            记录时间：{{ ticketInfo.create_time || '未知' }}
+            记录时间：{{ ticketInfo.createTime || ticketInfo.create_time || '未知' }}
           </span>
         </div>
 
@@ -37,7 +37,7 @@
         <el-divider />
 
         <div class="extra-info">
-          <p><strong>活动日期：</strong>{{ ticketInfo.event_date || '未填写' }}</p>
+          <p><strong>活动日期：</strong>{{ ticketInfo.eventDate || ticketInfo.event_date || '未填写' }}</p>
           <p><strong>活动地点：</strong>{{ ticketInfo.venue || '未填写' }}</p>
           <p>
             <strong>关联兴趣：</strong>
@@ -49,7 +49,7 @@
 
         <div class="content-box">
           <h3>体验笔记</h3>
-          <p>{{ ticketInfo.memo || '暂无评价内容' }}</p>
+          <p>{{ ticketInfo.content ?? ticketInfo.memo ?? '暂无评价内容' }}</p>
         </div>
       </div>
 

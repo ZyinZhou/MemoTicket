@@ -201,9 +201,9 @@ const loadTicketDetail = async () => {
         title: res.data.title || '',
         type: res.data.type || '',
         rating: res.data.rating ?? 5,
-        event_date: res.data.event_date || '',
         venue: res.data.venue || '',
-        memo: res.data.memo || '',
+        memo: res.data.content ?? res.data.memo ?? '',
+        event_date: res.data.eventDate ?? res.data.event_date ?? '',
         interests: res.data.interests || []
       })
     }
@@ -230,6 +230,7 @@ const handleSubmit = async () => {
       rating: form.rating,
       event_date: form.event_date || null,
       venue: form.venue,
+      content: form.memo,
       memo: form.memo,
       interests: form.interests
     }
