@@ -146,5 +146,9 @@ def login():
 from ticket_api import ticket_bp
 app.register_blueprint(ticket_bp)
 
+# ================= 5. 组队活动接口（E） =================
+from team_api import team_bp
+app.register_blueprint(team_bp)
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
