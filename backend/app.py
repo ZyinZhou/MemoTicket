@@ -144,11 +144,16 @@ def login():
 
 # ================= 4. 票根管理接口（E） =================
 from ticket_api import ticket_bp
-app.register_blueprint(ticket_bp)
 
 # ================= 5. 组队活动接口（E） =================
 from team_api import team_bp
+
+# ================= 6. 兴趣社区接口（A） =================
+from community_api import community_bp
+
+app.register_blueprint(ticket_bp)
 app.register_blueprint(team_bp)
+app.register_blueprint(community_bp)
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
