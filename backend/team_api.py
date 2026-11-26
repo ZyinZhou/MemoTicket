@@ -9,7 +9,7 @@
 #   - 返回格式：{ "code": 200, "msg": "...", "data": {...} }，与现有接口一致
 #   - 字段口径：返回字段名与前端页面一致（id、userId、title、description、eventDate、venue、capacity、status、signupCount、createTime）
 #   - 表依赖：Users(UserId)、TeamActivities、TeamActivityApplications
-#   - 报名、退出与申请审批接口属后续阶段，本模块仅提供活动基础数据与查询
+#   - 本模块提供活动的创建、列表、详情、修改、删除；报名、退出与申请审批接口属后续阶段
 
 import os
 
@@ -33,8 +33,10 @@ DB_CONFIG = (
     'TrustServerCertificate=yes;'
 )
 
-# 活动状态取值：招募中、已关闭；本轮无修改状态接口，创建时默认招募中
+# 活动状态取值：招募中、已关闭；创建时默认招募中，修改接口可置为已关闭，关闭后不可再改
 ACTIVITY_STATUS_OPEN = "招募中"
+ACTIVITY_STATUS_CLOSED = "已关闭"
+ACTIVITY_STATUSES = (ACTIVITY_STATUS_OPEN, ACTIVITY_STATUS_CLOSED)
 
 def get_db_connection():
     return pyodbc.connect(DB_CONFIG)
@@ -58,44 +60,61 @@ def get_json_body():
     body = request.get_json(silent=True)
     return body if isinstance(body, dict) else {}
 
-def parse_activity_fields(data):
+def parse_activity_fields(data, existing=None):
     # 校验组队活动字段，返回 (错误提示, 规范化字段字典)
+    # existing 不为空时，请求未提交的字段沿用原活动值，用于修改接口
     # 规则：title 必填且不超过100字符；description 不超过500字符；
     #       event_date 格式 YYYY-MM-DD；venue 不超过100字符；capacity 为正整数
-    title = str(data.get('title') or '').strip()
+    if 'title' in data:
+        title = str(data.get('title') or '').strip()
+    else:
+        title = existing.title if existing else ''
     if not title:
         return "活动标题不能为空", None
     if len(title) > 100:
         return "活动标题不能超过100个字符", None
 
-    description = str(data.get('description') or '').strip()
+    if 'description' in data:
+        description = str(data.get('description') or '').strip() or None
+    else:
+        description = existing.description if existing else None
     if description and len(description) > 500:
         return "活动描述不能超过500个字符", None
-    description = description or None
 
-    raw_date = data.get('event_date') if 'event_date' in data else data.get('eventDate')
-    raw_date = str(raw_date or '').strip()
-    event_date = None
-    if raw_date:
-        try:
-            event_date = datetime.strptime(raw_date, '%Y-%m-%d').date()
-        except ValueError:
-            return "活动时间格式应为 YYYY-MM-DD", None
+    if 'event_date' in data or 'eventDate' in data:
+        raw_value = data.get('event_date') if 'event_date' in data else data.get('eventDate')
+        raw_date = str(raw_value or '').strip()
+        event_date = None
+        if raw_date:
+            try:
+                event_date = datetime.strptime(raw_date, '%Y-%m-%d').date()
+            except ValueError:
+                return "活动时间格式应为 YYYY-MM-DD", None
+    else:
+        event_date = existing.event_date if existing else None
 
-    venue = str(data.get('venue') or '').strip() or None
+    if 'venue' in data:
+        venue = str(data.get('venue') or '').strip() or None
+    else:
+        venue = existing.venue if existing else None
     if venue and len(venue) > 100:
         return "活动地点不能超过100个字符", None
 
-    raw_capacity = data.get('capacity')
-    if raw_capacity is None:
-        return "人数上限必须为正整数", None
-    if isinstance(raw_capacity, bool) or (isinstance(raw_capacity, float) and not raw_capacity.is_integer()):
-        return "人数上限必须为正整数", None
-    try:
-        capacity = int(raw_capacity)
-    except (TypeError, ValueError):
-        return "人数上限必须为正整数", None
-    if capacity < 1:
+    if 'capacity' in data:
+        raw_capacity = data.get('capacity')
+        if raw_capacity is None:
+            return "人数上限必须为正整数", None
+        if isinstance(raw_capacity, bool) or (isinstance(raw_capacity, float) and not raw_capacity.is_integer()):
+            return "人数上限必须为正整数", None
+        try:
+            capacity = int(raw_capacity)
+        except (TypeError, ValueError):
+            return "人数上限必须为正整数", None
+        if capacity < 1:
+            return "人数上限必须为正整数", None
+    else:
+        capacity = existing.capacity if existing else None
+    if capacity is None:
         return "人数上限必须为正整数", None
 
     return "", {
@@ -137,6 +156,34 @@ def load_activity(cursor, activity_id):
     )
     row = cursor.fetchone()
     return TeamActivity.from_row(row) if row else None
+
+def load_owned_activity(cursor, activity_id, user_id):
+    # 查询活动并校验归属，返回 (活动对象, 错误响应)
+    # 活动不存在返回 404，非创建者返回 403；同时带出当前报名人数
+    cursor.execute(
+        """SELECT ActivityId, UserId, Title, Description, EventDate,
+                  Venue, Capacity, Status, CreateTime
+           FROM TeamActivities
+           WHERE ActivityId = ?""",
+        (activity_id,)
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None, (jsonify({"code": 404, "msg": "活动不存在"}), 404)
+    if row.UserId != user_id:
+        return None, (jsonify({"code": 403, "msg": "无权操作该活动"}), 403)
+
+    cursor.execute(
+        "SELECT COUNT(ApplicationId) FROM TeamActivityApplications WHERE ActivityId = ?",
+        (activity_id,)
+    )
+    signup_count = int(cursor.fetchone()[0] or 0)
+
+    activity = TeamActivity(
+        row.ActivityId, row.UserId, row.Title, row.Description, row.EventDate,
+        row.Venue, row.Capacity, row.Status, signup_count, row.CreateTime
+    )
+    return activity, None
 
 # ================= 9. 创建组队活动接口 =================
 # 请求方式：POST /api/activities
@@ -223,6 +270,101 @@ def get_activity_detail(activity_id):
             return jsonify({"code": 404, "msg": "活动不存在"}), 404
         return jsonify({"code": 200, "msg": "查询成功", "data": activity.to_dict()}), 200
     except Exception as e:
+        return jsonify({"code": 500, "msg": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# ================= 12. 修改组队活动接口 =================
+# 请求方式：PUT /api/activities/<activity_id>
+# 请求头：Authorization: Bearer <token>，仅活动创建者可修改
+# 请求体：字段同创建接口，支持部分提交，未提交字段沿用原值
+#   status 可选，取值 招募中 / 已关闭；已关闭活动拒绝再修改
+# 规则：人数上限不得小于当前报名人数；非创建者返回 403
+@team_bp.route('/api/activities/<int:activity_id>', methods=['PUT'])
+def update_activity(activity_id):
+    user_id = get_current_user_id()
+    if user_id is None:
+        return jsonify({"code": 401, "msg": "未登录或登录已过期"}), 401
+
+    data = get_json_body()
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        activity, error_response = load_owned_activity(cursor, activity_id, user_id)
+        if error_response:
+            return error_response
+
+        if activity.status == ACTIVITY_STATUS_CLOSED:
+            return jsonify({"code": 409, "msg": "活动已关闭，不能修改"}), 409
+
+        error, fields = parse_activity_fields(data, activity)
+        if error:
+            return jsonify({"code": 400, "msg": error}), 400
+
+        # 人数上限下调时不得低于已报名人数，避免出现超员
+        if fields['capacity'] < activity.signup_count:
+            return jsonify({
+                "code": 400,
+                "msg": f"人数上限不能小于当前报名人数（{activity.signup_count}）"
+            }), 400
+
+        if 'status' in data:
+            new_status = str(data.get('status') or '').strip()
+            if new_status not in ACTIVITY_STATUSES:
+                return jsonify({"code": 400, "msg": "活动状态只能为：招募中、已关闭"}), 400
+        else:
+            new_status = activity.status
+
+        cursor.execute(
+            """UPDATE TeamActivities
+               SET Title = ?, Description = ?, EventDate = ?, Venue = ?,
+                   Capacity = ?, Status = ?
+               WHERE ActivityId = ?""",
+            (fields['title'], fields['description'], fields['event_date'],
+             fields['venue'], fields['capacity'], new_status, activity_id)
+        )
+        conn.commit()
+        return jsonify({
+            "code": 200,
+            "msg": "修改成功",
+            "data": {"id": activity_id, "status": new_status}
+        }), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return jsonify({"code": 500, "msg": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+# ================= 13. 删除组队活动接口 =================
+# 请求方式：DELETE /api/activities/<activity_id>
+# 请求头：Authorization: Bearer <token>，仅活动创建者可删除
+# 删除前先清理该活动的报名记录，两步在同一事务内完成
+@team_bp.route('/api/activities/<int:activity_id>', methods=['DELETE'])
+def delete_activity(activity_id):
+    user_id = get_current_user_id()
+    if user_id is None:
+        return jsonify({"code": 401, "msg": "未登录或登录已过期"}), 401
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        activity, error_response = load_owned_activity(cursor, activity_id, user_id)
+        if error_response:
+            return error_response
+
+        cursor.execute("DELETE FROM TeamActivityApplications WHERE ActivityId = ?", (activity_id,))
+        cursor.execute("DELETE FROM TeamActivities WHERE ActivityId = ?", (activity_id,))
+        conn.commit()
+        return jsonify({"code": 200, "msg": "删除成功"}), 200
+    except Exception as e:
+        if conn:
+            conn.rollback()
         return jsonify({"code": 500, "msg": str(e)}), 500
     finally:
         if conn:
