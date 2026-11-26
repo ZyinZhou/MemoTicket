@@ -353,3 +353,69 @@
 **返回失败示例：**
 
 <pre><code>{ "code": 404, "msg": "活动不存在" }</code></pre>
+
+---
+
+## 12. 修改组队活动
+
+* **请求方式**：PUT
+* **请求路径**：`/api/activities/{id}`
+* **请求头**：`Authorization: Bearer <token>`（仅活动发布者可修改）
+* **请求体 (JSON)**：字段同创建接口，支持部分提交，未提交的字段沿用原值；另可传 `status`
+
+<pre><code>{
+  "title": "周末剧本杀组队（已满员）",
+  "capacity": 5,
+  "status": "已关闭"
+}</code></pre>
+
+*(注：`status` 取值 `招募中`、`已关闭`；活动关闭后不可再修改；`capacity` 修改后不得小于当前报名人数)*
+
+**返回成功示例：**
+
+<pre><code>{
+  "code": 200,
+  "msg": "修改成功",
+  "data": {
+    "id": 1,
+    "status": "已关闭"
+  }
+}</code></pre>
+
+**返回失败示例：**
+
+<pre><code>{ "code": 400, "msg": "人数上限不能小于当前报名人数（2）" }</code></pre>
+
+<pre><code>{ "code": 400, "msg": "活动状态只能为：招募中、已关闭" }</code></pre>
+
+<pre><code>{ "code": 401, "msg": "未登录或登录已过期" }</code></pre>
+
+<pre><code>{ "code": 403, "msg": "无权操作该活动" }</code></pre>
+
+<pre><code>{ "code": 404, "msg": "活动不存在" }</code></pre>
+
+<pre><code>{ "code": 409, "msg": "活动已关闭，不能修改" }</code></pre>
+
+---
+
+## 13. 删除组队活动
+
+* **请求方式**：DELETE
+* **请求路径**：`/api/activities/{id}`
+* **请求头**：`Authorization: Bearer <token>`（仅活动发布者可删除）
+* **说明**：删除活动时一并清除该活动的报名记录，两步在同一事务内完成
+
+**返回成功示例：**
+
+<pre><code>{
+  "code": 200,
+  "msg": "删除成功"
+}</code></pre>
+
+**返回失败示例：**
+
+<pre><code>{ "code": 401, "msg": "未登录或登录已过期" }</code></pre>
+
+<pre><code>{ "code": 403, "msg": "无权操作该活动" }</code></pre>
+
+<pre><code>{ "code": 404, "msg": "活动不存在" }</code></pre>
